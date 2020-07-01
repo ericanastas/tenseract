@@ -1,6 +1,7 @@
 # [Tenseract](http://tenseract.art)
 
-Burningman 2021 Installation
+A Burningman 2021 Installation
 
-tensegrity + tesseract = tenseract
+`tensegrity + tesseract = tenseract`
 
+http://tenseract.art
