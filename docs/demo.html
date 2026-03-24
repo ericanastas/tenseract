@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cube with Chasing Lights</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    canvas { display: block; }
+    #overlay {
+      position: fixed; top: 12px; left: 12px;
+      color: #ccc; font: 13px/1.6 monospace;
+      pointer-events: none;
+      text-shadow: 0 0 4px #000;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay"></div>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // --- Constants (1 unit = 1 foot) ---
+    const CUBE_SIZE = 5;
+    const POLE_RADIUS = 0.5 / 12 / 2; // 0.5 inch diameter → radius in feet
+    const LIGHTS_PER_EDGE = 45;
+    const LIGHT_RADIUS = 0.04; // ~1 inch diameter sphere
+
+    // --- Scene ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x111111);
+
+    // --- Camera ---
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(8, 6, 10);
+
+    // --- Renderer ---
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    // --- Controls ---
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, CUBE_SIZE / 2, 0);
+    controls.update();
+
+    // --- Resize handler ---
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- Scene lighting ---
+    scene.add(new THREE.AmbientLight(0x404040, 0.2));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    dirLight.position.set(5, 10, 5);
+    scene.add(dirLight);
+
+    // --- Shared geometry and materials ---
+    const poleMaterial = new THREE.MeshStandardMaterial({
+      color: 0x888888,
+      metalness: 0.7,
+      roughness: 0.3
+    });
+    const sphereGeometry = new THREE.SphereGeometry(LIGHT_RADIUS, 12, 8);
+    const lightSpheres = [];
+    const realLights = [];
+
+    // Direction groups: each stores arrays of poles, where each pole is an array of sphere indices
+    // 'vertical' (Y), 'leftright' (X), 'frontback' (Z), 'diagonal'
+    function makeDirGroups() {
+      return {
+        vertical:  { poles: [], realLightPoles: [] },
+        leftright: { poles: [], realLightPoles: [] },
+        frontback: { poles: [], realLightPoles: [] },
+        diagonal:  { poles: [], realLightPoles: [] },
+      };
+    }
+    const outerDirGroups = makeDirGroups();
+    const innerDirGroups = makeDirGroups();
+
+    // --- Function to build a single edge (pole + lights) and tag its direction ---
+    function buildEdge(a, b, direction, groups) {
+      const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+      const dir = new THREE.Vector3().subVectors(b, a);
+      const length = dir.length();
+
+      const edgePoleGeo = new THREE.CylinderGeometry(POLE_RADIUS, POLE_RADIUS, length, 16);
+      const pole = new THREE.Mesh(edgePoleGeo, poleMaterial);
+      pole.position.copy(mid);
+      const axis = new THREE.Vector3(0, 1, 0);
+      const quat = new THREE.Quaternion().setFromUnitVectors(axis, dir.clone().normalize());
+      pole.quaternion.copy(quat);
+      scene.add(pole);
+
+      const group = groups[direction];
+      const poleIndices = [];
+
+      for (let i = 0; i < LIGHTS_PER_EDGE; i++) {
+        const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const sphere = new THREE.Mesh(sphereGeometry, material);
+        const t = i / (LIGHTS_PER_EDGE - 1);
+        sphere.position.lerpVectors(a, b, t);
+        const outward = new THREE.Vector3().copy(sphere.position);
+        outward.y = 0;
+        if (outward.length() > 0) {
+          outward.normalize().multiplyScalar(POLE_RADIUS + LIGHT_RADIUS + 0.005);
+          sphere.position.add(outward);
+        }
+        scene.add(sphere);
+        lightSpheres.push(sphere);
+        poleIndices.push(lightSpheres.length - 1);
+      }
+      group.poles.push(poleIndices);
+
+      const poleRealLights = [];
+      const REAL_LIGHTS_PER_EDGE = 2;
+      for (let i = 0; i < REAL_LIGHTS_PER_EDGE; i++) {
+        const t = (i + 0.5) / REAL_LIGHTS_PER_EDGE;
+        const pointLight = new THREE.PointLight(0xffffff, 2, 8, 1);
+        pointLight.position.lerpVectors(a, b, t);
+        scene.add(pointLight);
+        realLights.push(pointLight);
+        poleRealLights.push({ light: pointLight, posInPole: Math.floor(t * (LIGHTS_PER_EDGE - 1)) });
+      }
+      group.realLightPoles.push(poleRealLights);
+    }
+
+    // --- Function to build a cube frame with lights ---
+    function buildCube(size, centerY, groups) {
+      const half = size / 2;
+      const bottomY = centerY - size / 2;
+      const topY = centerY + size / 2;
+
+      const corners = [
+        new THREE.Vector3(-half, bottomY, -half),
+        new THREE.Vector3( half, bottomY, -half),
+        new THREE.Vector3( half, bottomY,  half),
+        new THREE.Vector3(-half, bottomY,  half),
+        new THREE.Vector3(-half, topY, -half),
+        new THREE.Vector3( half, topY, -half),
+        new THREE.Vector3( half, topY,  half),
+        new THREE.Vector3(-half, topY,  half),
+      ];
+
+      // Left/Right edges (X-axis): [0,1], [3,2], [4,5], [7,6]
+      // Front/Back edges (Z-axis): [1,2], [0,3], [5,6], [4,7]
+      // Vertical edges (Y-axis): [0,4], [1,5], [2,6], [3,7]
+      const edgesWithDir = [
+        [[0, 1], 'leftright'], [[3, 2], 'leftright'], [[4, 5], 'leftright'], [[7, 6], 'leftright'],
+        [[0, 3], 'frontback'], [[1, 2], 'frontback'], [[4, 7], 'frontback'], [[5, 6], 'frontback'],
+        [[0, 4], 'vertical'],  [[1, 5], 'vertical'],  [[2, 6], 'vertical'],  [[3, 7], 'vertical'],
+      ];
+
+      for (const [[ai, bi], direction] of edgesWithDir) {
+        buildEdge(corners[ai], corners[bi], direction, groups);
+      }
+    }
+
+    // --- Helper to get cube corners ---
+    function getCubeCorners(size, centerY) {
+      const half = size / 2;
+      const bottomY = centerY - size / 2;
+      const topY = centerY + size / 2;
+      return [
+        new THREE.Vector3(-half, bottomY, -half),
+        new THREE.Vector3( half, bottomY, -half),
+        new THREE.Vector3( half, bottomY,  half),
+        new THREE.Vector3(-half, bottomY,  half),
+        new THREE.Vector3(-half, topY, -half),
+        new THREE.Vector3( half, topY, -half),
+        new THREE.Vector3( half, topY,  half),
+        new THREE.Vector3(-half, topY,  half),
+      ];
+    }
+
+    // --- Build outer cube (5', base at 1') ---
+    const outerCenterY = 1 + CUBE_SIZE / 2;
+    buildCube(CUBE_SIZE, outerCenterY, outerDirGroups);
+
+    // --- Build inner cube (2.5', centered in outer cube) ---
+    buildCube(CUBE_SIZE / 2, outerCenterY, innerDirGroups);
+
+    // --- Connect matching corners of outer and inner cubes ---
+    const outerCorners = getCubeCorners(CUBE_SIZE, outerCenterY);
+    const innerCorners = getCubeCorners(CUBE_SIZE / 2, outerCenterY);
+    for (let i = 0; i < 8; i++) {
+      buildEdge(outerCorners[i], innerCorners[i], 'diagonal', outerDirGroups);
+    }
+
+    // Direction group cycle order — each pair shares the same edges, reversed flag flips particle direction
+    const groupDefs = [
+      { name: 'vertical',  baseDir: 'vertical',  reversed: false },
+      { name: 'down',      baseDir: 'vertical',  reversed: true  },
+      { name: 'leftright', baseDir: 'leftright', reversed: false },
+      { name: 'rightleft', baseDir: 'leftright', reversed: true  },
+      { name: 'frontback', baseDir: 'frontback', reversed: false },
+      { name: 'backfront', baseDir: 'frontback', reversed: true  },
+    ];
+    const groupNames = groupDefs.map(g => g.name);
+    const SWITCH_INTERVAL = 3; // seconds per direction
+
+    // --- Simple person model (to the right of the cube) ---
+    {
+      const personGroup = new THREE.Group();
+      const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
+
+      // Proportions (approx 5'10" = 5.83 ft total)
+      const footY = 0;
+
+      // Shoes
+      const shoeGeo = new THREE.BoxGeometry(0.35, 0.15, 0.55);
+      const leftShoe = new THREE.Mesh(shoeGeo, whiteMat);
+      leftShoe.position.set(-0.22, footY + 0.075, 0.05);
+      personGroup.add(leftShoe);
+      const rightShoe = new THREE.Mesh(shoeGeo, whiteMat);
+      rightShoe.position.set(0.22, footY + 0.075, 0.05);
+      personGroup.add(rightShoe);
+
+      // Legs
+      const legGeo = new THREE.CylinderGeometry(0.15, 0.13, 2.8, 8);
+      const leftLeg = new THREE.Mesh(legGeo, whiteMat);
+      leftLeg.position.set(-0.22, footY + 0.15 + 1.4, 0);
+      personGroup.add(leftLeg);
+      const rightLeg = new THREE.Mesh(legGeo, whiteMat);
+      rightLeg.position.set(0.22, footY + 0.15 + 1.4, 0);
+      personGroup.add(rightLeg);
+
+      // Torso
+      const torsoY = footY + 0.15 + 2.8;
+      const torsoGeo = new THREE.CylinderGeometry(0.4, 0.35, 1.8, 8);
+      const torso = new THREE.Mesh(torsoGeo, whiteMat);
+      torso.position.set(0, torsoY + 0.9, 0);
+      personGroup.add(torso);
+
+      // Arms
+      const armGeo = new THREE.CylinderGeometry(0.1, 0.09, 2.2, 8);
+      const leftArm = new THREE.Mesh(armGeo, whiteMat);
+      leftArm.position.set(-0.55, torsoY + 0.7, 0);
+      leftArm.rotation.z = 0.1;
+      personGroup.add(leftArm);
+      const rightArm = new THREE.Mesh(armGeo, whiteMat);
+      rightArm.position.set(0.55, torsoY + 0.7, 0);
+      rightArm.rotation.z = -0.1;
+      personGroup.add(rightArm);
+
+      // Neck
+      const neckY = torsoY + 1.8;
+      const neckGeo = new THREE.CylinderGeometry(0.12, 0.14, 0.3, 8);
+      const neck = new THREE.Mesh(neckGeo, whiteMat);
+      neck.position.set(0, neckY + 0.15, 0);
+      personGroup.add(neck);
+
+      // Head
+      const headGeo = new THREE.SphereGeometry(0.38, 12, 10);
+      const head = new THREE.Mesh(headGeo, whiteMat);
+      head.position.set(0, neckY + 0.3 + 0.38, 0);
+      personGroup.add(head);
+
+      // Position person to the right of the cube
+      personGroup.position.set(CUBE_SIZE / 2 + 2, 0, 0);
+      scene.add(personGroup);
+    }
+
+    // --- Ground plane ---
+    const groundGeometry = new THREE.PlaneGeometry(20, 20);
+    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // --- Animation ---
+    const color = new THREE.Color();
+    const darkColor = new THREE.Color(0x050505);
+    // --- Smooth random parameter system ---
+    // Each parameter smoothly interpolates between random target values
+    function createSmoothParam(min, max, minDuration, maxDuration) {
+      const range = max - min;
+      const startVal = min + Math.random() * range;
+      return {
+        min, max,
+        minDuration, maxDuration,
+        currentVal: startVal,
+        fromVal: startVal,
+        toVal: min + Math.random() * range,
+        transitionStart: 0,
+        transitionDuration: minDuration + Math.random() * (maxDuration - minDuration),
+      };
+    }
+
+    function updateSmoothParam(param, t) {
+      let elapsed = t - param.transitionStart;
+      let progress = Math.min(elapsed / param.transitionDuration, 1);
+      // Smoothstep for easing
+      progress = progress * progress * (3 - 2 * progress);
+      param.currentVal = param.fromVal + (param.toVal - param.fromVal) * progress;
+
+      if (elapsed >= param.transitionDuration) {
+        param.fromVal = param.toVal;
+        param.toVal = param.min + Math.random() * (param.max - param.min);
+        param.transitionStart = t;
+        param.transitionDuration = param.minDuration + Math.random() * (param.maxDuration - param.minDuration);
+      }
+      return param.currentVal;
+    }
+
+    const paramSpeed = createSmoothParam(13, 18, 2, 6);
+    const paramTailLength = createSmoothParam(3, 10, 2, 7);
+
+    // Build a set of all sphere indices that belong to any base direction, for quick lookup
+    const baseDirs = ['vertical', 'leftright', 'frontback'];
+    const allGroupSpheres = new Map(); // sphereIndex -> { baseDir, posInPole, cubeSet }
+    for (const [cubeSet, dg] of [['outer', outerDirGroups], ['inner', innerDirGroups]]) {
+      for (const baseDir of baseDirs) {
+        const group = dg[baseDir];
+        for (let p = 0; p < group.poles.length; p++) {
+          for (let j = 0; j < group.poles[p].length; j++) {
+            allGroupSpheres.set(group.poles[p][j], { baseDir, posInPole: j, cubeSet });
+          }
+        }
+      }
+    }
+
+    function getBrightness(posInPole, particlePos, tailLength) {
+      let dist = particlePos - posInPole;
+      if (dist < 0) dist += LIGHTS_PER_EDGE;
+      if (dist > LIGHTS_PER_EDGE / 2) dist = LIGHTS_PER_EDGE - dist;
+      if (dist < 1) return 1.0;
+      if (dist <= tailLength) return 1.0 - (dist / tailLength);
+      return 0;
+    }
+
+
+
+    // Each group gets a sine-wave weight offset by 1/N of the cycle.
+    // phaseOffset shifts the cycle so inner/outer cubes are out of sync.
+    function getGroupWeight(groupIdx, t, phaseOffset) {
+      const cyclePeriod = SWITCH_INTERVAL * groupNames.length;
+      const angle = (t / cyclePeriod) * Math.PI * 2 + (groupIdx / groupNames.length) * Math.PI * 2 + phaseOffset;
+      return Math.max(0, Math.sin(angle));
+    }
+
+    // Inner cube cycle is offset by ~2/3 of a full rotation so it leads the outer by one step
+    const INNER_PHASE_OFFSET = (2 / 3) * Math.PI * 2;
+
+    let particlePos = 0;
+    let lastTime = null;
+
+    function animate(time) {
+      requestAnimationFrame(animate);
+
+      const t = time * 0.001; // seconds
+      const dt = lastTime === null ? 0 : t - lastTime;
+      lastTime = t;
+
+      // Update smooth parameters
+      const currentSpeed = updateSmoothParam(paramSpeed, t);
+      const currentTailLength = updateSmoothParam(paramTailLength, t);
+
+      // Integrate position so speed changes never cause backward jumps
+      particlePos = (particlePos + currentSpeed * dt) % LIGHTS_PER_EDGE;
+
+      // Separate weights for outer and inner cubes (one weight per groupDef entry)
+      const outerWeights = groupDefs.map((_, idx) => getGroupWeight(idx, t, 0));
+      const innerWeights = groupDefs.map((_, idx) => getGroupWeight(idx, t, INNER_PHASE_OFFSET));
+
+      // Hues: evenly spaced, outer and inner offset by 0.5
+      const outerHues = groupDefs.map((_, idx) => (t * 0.05 + idx / groupDefs.length) % 1);
+      const innerHues = groupDefs.map((_, idx) => (t * 0.05 + idx / groupDefs.length + 0.5) % 1);
+
+      // Update all light spheres — accumulate contributions from all groups sharing this baseDir
+      const tempColor = new THREE.Color();
+      for (let i = 0; i < lightSpheres.length; i++) {
+        const info = allGroupSpheres.get(i);
+        if (!info) { lightSpheres[i].material.color.copy(darkColor); continue; }
+
+        const isInner = info.cubeSet === 'inner';
+        let lr = 0, lg = 0, lb = 0;
+
+        for (let gi = 0; gi < groupDefs.length; gi++) {
+          const def = groupDefs[gi];
+          if (def.baseDir !== info.baseDir) continue;
+          const weight = isInner ? innerWeights[gi] : outerWeights[gi];
+          if (weight <= 0.001) continue;
+          const effPos = def.reversed ? (LIGHTS_PER_EDGE - 1 - info.posInPole) : info.posInPole;
+          const brightness = getBrightness(effPos, particlePos, currentTailLength) * weight;
+          const hue = isInner ? innerHues[gi] : outerHues[gi];
+          tempColor.setHSL(hue, 1.0, brightness * 0.5);
+          lr += tempColor.r; lg += tempColor.g; lb += tempColor.b;
+        }
+
+        lightSpheres[i].material.color.setRGB(
+          Math.min(lr, 1), Math.min(lg, 1), Math.min(lb, 1)
+        );
+      }
+
+      // Update real PointLights per pole
+      for (const [cubeSet, dg, weights, hues] of [
+        ['outer', outerDirGroups, outerWeights, outerHues],
+        ['inner', innerDirGroups, innerWeights, innerHues],
+      ]) {
+        for (let gi = 0; gi < groupDefs.length; gi++) {
+          const def = groupDefs[gi];
+          const group = dg[def.baseDir];
+          const weight = weights[gi];
+          for (let p = 0; p < group.realLightPoles.length; p++) {
+            for (const { light, posInPole } of group.realLightPoles[p]) {
+              if (weight > 0.001) {
+                const effPos = def.reversed ? (LIGHTS_PER_EDGE - 1 - posInPole) : posInPole;
+                const brightness = getBrightness(effPos, particlePos, currentTailLength) * weight;
+                color.setHSL(hues[gi], 1.0, 0.5);
+                light.color.copy(color);
+                light.intensity = brightness * 4;
+              } else {
+                light.intensity = 0;
+              }
+            }
+          }
+        }
+      }
+
+      // Update overlay text
+      const overlay = document.getElementById('overlay');
+      const bar = w => '█'.repeat(Math.round(w * 10)).padEnd(10, '░');
+      overlay.innerHTML =
+        `speed:  ${currentSpeed.toFixed(1).padStart(5)}  [${paramSpeed.min}–${paramSpeed.max}]<br>` +
+        `tail:   ${currentTailLength.toFixed(1).padStart(5)}  [${paramTailLength.min}–${paramTailLength.max}]<br>` +
+        `<br>outer:<br>` +
+        groupDefs.map((def, i) =>
+          `&nbsp;${def.name.padEnd(10)} ${bar(outerWeights[i])} ${(outerWeights[i] * 100).toFixed(0).padStart(3)}%`
+        ).join('<br>') +
+        `<br>inner:<br>` +
+        groupDefs.map((def, i) =>
+          `&nbsp;${def.name.padEnd(10)} ${bar(innerWeights[i])} ${(innerWeights[i] * 100).toFixed(0).padStart(3)}%`
+        ).join('<br>');
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
