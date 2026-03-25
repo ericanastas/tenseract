@@ -114,6 +114,7 @@
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0, 0); // updated below once outerCenterY is known
     controls.enablePan = false;
+    controls.maxPolarAngle = Math.PI / 2;
     controls.autoRotate = true;
     controls.autoRotateSpeed = -2;
     controls.update();
