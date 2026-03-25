@@ -61,7 +61,21 @@
     // --- Controls ---
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, CUBE_SIZE / 2, 0);
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = -1.5;
     controls.update();
+
+    let autoOrbit = true;
+    controls.addEventListener('start', () => {
+      autoOrbit = false;
+      controls.autoRotate = false;
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'o' || e.key === 'O') {
+        autoOrbit = !autoOrbit;
+        controls.autoRotate = autoOrbit;
+      }
+    });
 
     // --- Resize handler ---
     window.addEventListener('resize', () => {
@@ -511,15 +525,12 @@
       // Update overlay text
       const overlay = document.getElementById('overlay');
       const bar = w => '█'.repeat(Math.round(w * 10)).padEnd(10, '▁');
-      const cornerCord = poleEndpoints[0].position.distanceTo(poleEndpoints[8].position);
-      const edgeLength = poleEndpoints[8].position.distanceTo(poleEndpoints[4].position);
       overlay.innerHTML =
         `speed:  ${currentSpeed.toFixed(1).padStart(5)}  [${paramSpeed.min}–${paramSpeed.max}]<br>` +
         `tail:   ${currentTailLength.toFixed(1).padStart(5)}  [${paramTailLength.min}–${paramTailLength.max}]<br>` +
+        `[O] orbit:  ${autoOrbit ? 'auto' : 'manual'}<br>` +
         `[L] labels: ${labelsVisible ? 'on' : 'off'}<br>` +
         `[D] dust:   ${windVisible ? 'on' : 'off'}<br>` +
-        `Corner Cord: ${(cornerCord * 12).toFixed(2)}"  (${cornerCord.toFixed(3)} ft)<br>` +
-        `Edge Length: ${(edgeLength * 12).toFixed(2)}"  (${edgeLength.toFixed(3)} ft)<br>` +
         `<br>outer:<br>` +
         groupDefs.map((def, i) =>
           `&nbsp;${def.name.padEnd(10)} ${bar(outerWeights[i])} ${(outerWeights[i] * 100).toFixed(0).padStart(3)}%`
