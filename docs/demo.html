@@ -544,22 +544,13 @@
 
       // Update overlay text
       const overlay = document.getElementById('overlay');
-      const bar = w => '█'.repeat(Math.round(w * 10)).padEnd(10, '▁');
       overlay.innerHTML =
         `speed:  ${currentSpeed.toFixed(1).padStart(5)}  [${paramSpeed.min}–${paramSpeed.max}]<br>` +
         `tail:   ${currentTailLength.toFixed(1).padStart(5)}  [${paramTailLength.min}–${paramTailLength.max}]<br>` +
         `[O] orbit:  ${autoOrbit ? 'auto' : 'manual'}<br>` +
         `[B] bloom:  ${bloomPass.enabled ? 'on' : 'off'}<br>` +
         `[L] labels: ${labelsVisible ? 'on' : 'off'}<br>` +
-        `[D] dust:   ${windVisible ? 'on' : 'off'}<br>` +
-        `<br>outer:<br>` +
-        groupDefs.map((def, i) =>
-          `&nbsp;${def.name.padEnd(10)} ${bar(outerWeights[i])} ${(outerWeights[i] * 100).toFixed(0).padStart(3)}%`
-        ).join('<br>') +
-        `<br>inner:<br>` +
-        groupDefs.map((def, i) =>
-          `&nbsp;${def.name.padEnd(10)} ${bar(innerWeights[i])} ${(innerWeights[i] * 100).toFixed(0).padStart(3)}%`
-        ).join('<br>');
+        `[D] dust:   ${windVisible ? 'on' : 'off'}`;
 
       // Animate blowing particles
       windGeo.setDrawRange(0, Math.floor(updateSmoothParam(paramWindDensity, t) * PARTICLE_COUNT));
