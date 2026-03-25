@@ -36,7 +36,7 @@
     const POLE_RADIUS = 0.5 / 12 / 2; // 0.5 inch diameter → radius in feet
     const OUTER_LIGHTS_PER_EDGE = 43;
     const INNER_LIGHTS_PER_EDGE = 19;
-    const LIGHT_RADIUS = 0.05; // ~1 inch diameter sphere
+    const LIGHT_RADIUS = 0.04; // ~1 inch diameter sphere
     const POLE_TWIST_ANGLE = 25 * Math.PI / 180;
     const POLE_INWARD_FACTOR = 0.31; // 0 = no movement, 1 = fully at center
 
@@ -68,7 +68,7 @@
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
       3,   // strength
-      1,   // radius
+      2,   // radius
       0.2    // threshold
     );
     composer.addPass(bloomPass);
@@ -443,10 +443,10 @@
       return param.currentVal;
     }
 
-    const paramSpeed = createSmoothParam(10, 30, 2, 6);
-    const paramTailLength = createSmoothParam(2, 12, 2, 7);
+    const paramSpeed = createSmoothParam(5, 25, 2, 6);
+    const paramTailLength = createSmoothParam(2, 15, 2, 7);
     const paramWindDensity = createSmoothParam(0.05, 1.0, 3, 10);
-    const paramGreenEmissive = createSmoothParam(0, 0.7, .5, 3);
+    const paramGreenEmissive = createSmoothParam(0, 0.8, 1, 10);
 
     // Build a set of all sphere indices that belong to any base direction, for quick lookup
     const baseDirs = ['vertical', 'leftright', 'frontback'];
@@ -568,20 +568,22 @@
         }
       }
 
+      // Animate blowing particles
+      windGeo.setDrawRange(0, Math.floor(updateSmoothParam(paramWindDensity, t) * PARTICLE_COUNT));
+      const currentGreenEmissive = updateSmoothParam(paramGreenEmissive, t);
+      greenMat.emissiveIntensity = currentGreenEmissive;
+
       // Update overlay text
       const overlay = document.getElementById('overlay');
       overlay.innerHTML =
-        `speed:  ${currentSpeed.toFixed(1).padStart(5)}  [${paramSpeed.min}–${paramSpeed.max}]<br>` +
-        `tail:   ${currentTailLength.toFixed(1).padStart(5)}  [${paramTailLength.min}–${paramTailLength.max}]<br>` +
+        `speed:    ${currentSpeed.toFixed(1).padStart(5)}  [${paramSpeed.min}–${paramSpeed.max}]<br>` +
+        `tail:     ${currentTailLength.toFixed(1).padStart(5)}  [${paramTailLength.min}–${paramTailLength.max}]<br>` +
+        `UV light: ${currentGreenEmissive.toFixed(2).padStart(5)}  [${paramGreenEmissive.min}–${paramGreenEmissive.max}]<br>` +
         `[O] orbit:  ${autoOrbit ? 'auto' : 'manual'}<br>` +
         `[B] bloom:  ${bloomPass.enabled ? 'on' : 'off'}<br>` +
         `[P] labels: ${labelsVisible ? 'on' : 'off'}<br>` +
         `[D] dust:   ${windVisible ? 'on' : 'off'}<br>` +
         `[N] light:  ${lightLevels[lightLevelIndex].label}`;
-
-      // Animate blowing particles
-      windGeo.setDrawRange(0, Math.floor(updateSmoothParam(paramWindDensity, t) * PARTICLE_COUNT));
-      greenMat.emissiveIntensity = updateSmoothParam(paramGreenEmissive, t);
       const wpos = windGeo.attributes.position.array;
       for (let i = 0; i < PARTICLE_COUNT; i++) {
         wpos[i*3]   += windVelocities[i*3]   * dt;
