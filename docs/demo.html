@@ -43,7 +43,7 @@
     new THREE.TextureLoader().load('Playa_Sunrise_8k.jpg', (tex) => {
       tex.mapping = THREE.EquirectangularReflectionMapping;
       scene.background = tex;
-      scene.backgroundIntensity = 0.2;
+      scene.backgroundIntensity = 0.08;
     });
 
     // --- Ground texture ---
@@ -78,8 +78,8 @@
     });
 
     // --- Scene lighting ---
-    scene.add(new THREE.AmbientLight(0x404040, .2));
-    const dirLight = new THREE.DirectionalLight(0xffffff, .25);
+    scene.add(new THREE.AmbientLight(0x404040, 1));
+    const dirLight = new THREE.DirectionalLight(0xffffff, .08);
     dirLight.position.set(5, 10, 5);
     scene.add(dirLight);
 
