@@ -151,10 +151,10 @@
       group.poles.push(poleIndices);
 
       const poleRealLights = [];
-      const REAL_LIGHTS_PER_EDGE = 4;
+      const REAL_LIGHTS_PER_EDGE = 3;
       for (let i = 0; i < REAL_LIGHTS_PER_EDGE; i++) {
         const t = (i + 0.5) / REAL_LIGHTS_PER_EDGE;
-        const pointLight = new THREE.PointLight(0xffffff, 0.5, 8, 1);
+        const pointLight = new THREE.PointLight(0xffffff, 0.5, 8, 3);
         pointLight.position.lerpVectors(a, b, t);
         scene.add(pointLight);
         realLights.push(pointLight);
