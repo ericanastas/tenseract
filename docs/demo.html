@@ -315,8 +315,9 @@
     const endpointLabels = poleEndpoints.map(ep => makeEndpointLabel(ep.index, ep.position));
 
     // --- Neon green connector poles ---
+    let greenMat;
     {
-      const greenMat = new THREE.MeshStandardMaterial({ color: 0x00ff55, emissive: 0x00aa33, emissiveIntensity: 0.6, roughness: 0.6, metalness: 0.1 });
+      greenMat = new THREE.MeshStandardMaterial({ color: 0x00ff55, emissive: 0x00aa33, emissiveIntensity: .7, roughness: 0.6, metalness: 0.1 });
       const greenRadius = 0.3125 / 12 / 2; // 5/16" diameter
       const outerPairs = [[20,11],[11,3],[3,20],[22,2],[2,9],[9,22],[16,8],[8,0],[0,16],[18,1],[1,10],[10,18],[7,15],[15,21],[21,7],[13,6],[6,23],[23,13],[4,12],[12,17],[17,4],[14,5],[5,19],[19,14],[3,18],[9,20],[0,22],[10,16],[1,14],[11,7],[2,13],[8,4],[17,6],[12,19],[5,21],[15,23]];
       const extraPairs = [[3,27],[20,44],[11,35],[9,33],[22,46],[2,26],[0,24],[16,40],[8,32],[10,34],[18,42],[1,25],[13,37],[23,47],[6,30],[7,31],[21,45],[15,39],[14,38],[19,43],[5,29],[17,41],[12,36],[4,28]];
@@ -425,6 +426,7 @@
     const paramSpeed = createSmoothParam(13, 22, 2, 6);
     const paramTailLength = createSmoothParam(3, 10, 2, 7);
     const paramWindDensity = createSmoothParam(0.05, 1.0, 3, 10);
+    const paramGreenEmissive = createSmoothParam(0, 0.7, .5, 3);
 
     // Build a set of all sphere indices that belong to any base direction, for quick lookup
     const baseDirs = ['vertical', 'leftright', 'frontback'];
@@ -561,6 +563,7 @@
 
       // Animate blowing particles
       windGeo.setDrawRange(0, Math.floor(updateSmoothParam(paramWindDensity, t) * PARTICLE_COUNT));
+      greenMat.emissiveIntensity = updateSmoothParam(paramGreenEmissive, t);
       const wpos = windGeo.attributes.position.array;
       for (let i = 0; i < PARTICLE_COUNT; i++) {
         wpos[i*3]   += windVelocities[i*3]   * dt;
@@ -583,3 +586,4 @@
   </script>
 </body>
 </html>
+
