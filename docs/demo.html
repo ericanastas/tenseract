@@ -370,7 +370,7 @@
 
       // Update overlay text
       const overlay = document.getElementById('overlay');
-      const bar = w => '█'.repeat(Math.round(w * 10)).padEnd(10, '░');
+      const bar = w => '█'.repeat(Math.round(w * 10)).padEnd(10, '▁');
       overlay.innerHTML =
         `speed:  ${currentSpeed.toFixed(1).padStart(5)}  [${paramSpeed.min}–${paramSpeed.max}]<br>` +
         `tail:   ${currentTailLength.toFixed(1).padStart(5)}  [${paramTailLength.min}–${paramTailLength.max}]<br>` +
