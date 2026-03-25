@@ -225,6 +225,21 @@
     const groupNames = groupDefs.map(g => g.name);
     const SWITCH_INTERVAL = 3; // seconds per direction
 
+    // --- Pedestals (pyramid, 5"x5" base at ground, tip at outer cube bottom corners) ---
+    {
+      const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.3, roughness: 0.7 });
+      const baseRadius = (5 / 12) / Math.sqrt(2); // circumradius for a 5"x5" square
+      const pedestalHeight = 1; // outer cube bottom is at Y=1
+      const pedestalGeo = new THREE.CylinderGeometry(0, baseRadius, pedestalHeight, 4);
+      const half = CUBE_SIZE / 2;
+      for (const [x, z] of [[-half, -half], [half, -half], [half, half], [-half, half]]) {
+        const mesh = new THREE.Mesh(pedestalGeo, pedestalMat);
+        mesh.position.set(x, pedestalHeight / 2, z);
+        mesh.rotation.y = Math.PI / 4;
+        scene.add(mesh);
+      }
+    }
+
     // --- Ground plane ---
     const groundGeometry = new THREE.PlaneGeometry(50, 50);
     const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
