@@ -12,10 +12,42 @@
       pointer-events: none;
       text-shadow: 0 0 4px #000;
     }
+    #controls {
+      position: fixed; bottom: 16px; left: 50%;
+      transform: translateX(-50%);
+      display: flex; gap: 8px;
+    }
+    #controls button {
+      background: rgba(0,0,0,0.6);
+      color: #aaa;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 7px 14px;
+      font: 13px monospace;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    #controls button:hover {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      border-color: #888;
+    }
+    #controls button.active {
+      background: rgba(255,255,255,0.18);
+      color: #fff;
+      border-color: #ccc;
+    }
   </style>
 </head>
 <body>
   <div id="overlay"></div>
+  <div id="controls">
+    <button id="btn-orbit" class="active">[O]rbit: auto</button>
+    <button id="btn-bloom" class="active">[B]loom: on</button>
+    <button id="btn-labels">[P]oint Labels: off</button>
+    <button id="btn-dust">[D]ust: off</button>
+    <button id="btn-light">[L]ight: dawn</button>
+  </div>
   <script type="importmap">
   {
     "imports": {
@@ -84,18 +116,55 @@
     controls.addEventListener('start', () => {
       autoOrbit = false;
       controls.autoRotate = false;
+      updateButtons();
     });
+
+    function updateButtons() {
+      const btnOrbit = document.getElementById('btn-orbit');
+      btnOrbit.textContent = `[O]rbit: ${autoOrbit ? 'auto' : 'manual'}`;
+      btnOrbit.classList.toggle('active', autoOrbit);
+      const btnBloom = document.getElementById('btn-bloom');
+      btnBloom.textContent = `[B]loom: ${bloomPass.enabled ? 'on' : 'off'}`;
+      btnBloom.classList.toggle('active', bloomPass.enabled);
+      const btnLabels = document.getElementById('btn-labels');
+      btnLabels.textContent = `[P]oint Labels: ${labelsVisible ? 'on' : 'off'}`;
+      btnLabels.classList.toggle('active', labelsVisible);
+      const btnDust = document.getElementById('btn-dust');
+      btnDust.textContent = `[D]ust: ${windVisible ? 'on' : 'off'}`;
+      btnDust.classList.toggle('active', windVisible);
+      const btnLight = document.getElementById('btn-light');
+      btnLight.textContent = `[L]ight: ${lightLevels[lightLevelIndex].label}`;
+    }
+
+    document.getElementById('btn-orbit').addEventListener('click', () => {
+      autoOrbit = !autoOrbit;
+      controls.autoRotate = autoOrbit;
+      updateButtons();
+    });
+    document.getElementById('btn-bloom').addEventListener('click', () => {
+      bloomPass.enabled = !bloomPass.enabled;
+      updateButtons();
+    });
+    document.getElementById('btn-light').addEventListener('click', () => {
+      lightLevelIndex = (lightLevelIndex + 1) % lightLevels.length;
+      applyLightLevel(lightLevelIndex);
+      updateButtons();
+    });
+
     window.addEventListener('keydown', (e) => {
       if (e.key === 'o' || e.key === 'O') {
         autoOrbit = !autoOrbit;
         controls.autoRotate = autoOrbit;
+        updateButtons();
       }
       if (e.key === 'b' || e.key === 'B') {
         bloomPass.enabled = !bloomPass.enabled;
+        updateButtons();
       }
-      if (e.key === 'n' || e.key === 'N') {
+      if (e.key === 'l' || e.key === 'L') {
         lightLevelIndex = (lightLevelIndex + 1) % lightLevels.length;
         applyLightLevel(lightLevelIndex);
+        updateButtons();
       }
     });
 
@@ -360,14 +429,28 @@
     endpointLabels.forEach(s => s.visible = false);
 
     let windVisible = false;
+
+    document.getElementById('btn-labels').addEventListener('click', () => {
+      labelsVisible = !labelsVisible;
+      endpointLabels.forEach(s => s.visible = labelsVisible);
+      updateButtons();
+    });
+    document.getElementById('btn-dust').addEventListener('click', () => {
+      windVisible = !windVisible;
+      windParticles.visible = windVisible;
+      updateButtons();
+    });
+
     window.addEventListener('keydown', (e) => {
       if (e.key === 'p' || e.key === 'P') {
         labelsVisible = !labelsVisible;
         endpointLabels.forEach(s => s.visible = labelsVisible);
+        updateButtons();
       }
       if (e.key === 'd' || e.key === 'D') {
         windVisible = !windVisible;
         windParticles.visible = windVisible;
+        updateButtons();
       }
     });
 
@@ -577,12 +660,7 @@
       overlay.innerHTML =
         `speed:    ${currentSpeed.toFixed(1).padStart(5)}  [${paramSpeed.min}–${paramSpeed.max}]<br>` +
         `tail:     ${currentTailLength.toFixed(1).padStart(5)}  [${paramTailLength.min}–${paramTailLength.max}]<br>` +
-        `UV light: ${currentGreenEmissive.toFixed(2).padStart(5)}  [${paramGreenEmissive.min}–${paramGreenEmissive.max}]<br>` +
-        `[O] orbit:  ${autoOrbit ? 'auto' : 'manual'}<br>` +
-        `[B] bloom:  ${bloomPass.enabled ? 'on' : 'off'}<br>` +
-        `[P] labels: ${labelsVisible ? 'on' : 'off'}<br>` +
-        `[D] dust:   ${windVisible ? 'on' : 'off'}<br>` +
-        `[N] light:  ${lightLevels[lightLevelIndex].label}`;
+        `UV light: ${currentGreenEmissive.toFixed(2).padStart(5)}  [${paramGreenEmissive.min}–${paramGreenEmissive.max}]`;
       const wpos = windGeo.attributes.position.array;
       for (let i = 0; i < PARTICLE_COUNT; i++) {
         wpos[i*3]   += windVelocities[i*3]   * dt;
