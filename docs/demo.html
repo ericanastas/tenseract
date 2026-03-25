@@ -34,6 +34,7 @@
     const LIGHTS_PER_EDGE = 45;
     const LIGHT_RADIUS = 0.04; // ~1 inch diameter sphere
     const POLE_TWIST_ANGLE = 25 * Math.PI / 180;
+    const POLE_INWARD_FACTOR = 0.31; // 0 = no movement, 1 = fully at center
 
     // --- Scene ---
     const scene = new THREE.Scene();
@@ -77,7 +78,7 @@
     });
 
     // --- Scene lighting ---
-    scene.add(new THREE.AmbientLight(0x404040, 0));
+    scene.add(new THREE.AmbientLight(0x404040, .2));
     const dirLight = new THREE.DirectionalLight(0xffffff, .25);
     dirLight.position.set(5, 10, 5);
     scene.add(dirLight);
@@ -91,6 +92,7 @@
     const sphereGeometry = new THREE.SphereGeometry(LIGHT_RADIUS, 12, 8);
     const lightSpheres = [];
     const realLights = [];
+    const poleEndpoints = []; // { position, index } — populated by buildEdge
 
     // Direction groups: each stores arrays of poles, where each pole is an array of sphere indices
     // 'vertical' (Y), 'leftright' (X), 'frontback' (Z), 'diagonal'
@@ -114,7 +116,16 @@
         const rotQuat = new THREE.Quaternion().setFromAxisAngle(rotAxis, POLE_TWIST_ANGLE);
         a = a.clone().sub(mid).applyQuaternion(rotQuat).add(mid);
         b = b.clone().sub(mid).applyQuaternion(rotQuat).add(mid);
+        // Translate the whole pole inward toward the cube center
+        const inward = new THREE.Vector3().subVectors(cubeCenter, mid).multiplyScalar(POLE_INWARD_FACTOR);
+        a = a.add(inward);
+        b = b.add(inward);
+        mid.add(inward);
       }
+      // Record endpoints with sequential indices
+      poleEndpoints.push({ position: a.clone(), index: poleEndpoints.length });
+      poleEndpoints.push({ position: b.clone(), index: poleEndpoints.length });
+
       const dir = new THREE.Vector3().subVectors(b, a);
       const length = dir.length();
 
@@ -207,8 +218,8 @@
       ];
     }
 
-    // Pre-compute how far below bottomY the lower corners drop due to pole rotation.
-    // The drop amount is translation-invariant so we compute it with bottomY=0 as reference.
+    // Pre-compute net Y displacement of the lower corner after BOTH rotation and inward translation.
+    // Both transformations are translation-invariant in Y, so bottomY=0 is a valid reference.
     const _h = CUBE_SIZE / 2;
     const _refMid    = new THREE.Vector3(0,  0,  -_h);
     const _refCenter = new THREE.Vector3(0, _h,   0);
@@ -216,11 +227,13 @@
     const _refAxis   = new THREE.Vector3().subVectors(_refCenter, _refMid).normalize();
     const _refQuat   = new THREE.Quaternion().setFromAxisAngle(_refAxis, POLE_TWIST_ANGLE);
     const _refRotated = _refCorner.clone().sub(_refMid).applyQuaternion(_refQuat).add(_refMid);
-    const CORNER_DROP = -_refRotated.y; // how far below bottomY the lower point falls
+    const _refInward  = new THREE.Vector3().subVectors(_refCenter, _refMid).multiplyScalar(POLE_INWARD_FACTOR);
+    const CORNER_NET_LIFT = _refRotated.y + _refInward.y; // net Y when bottomY=0 (may be + or -)
 
-    // Set outerCenterY so the rotated lower corners land at exactly 1 foot above ground
-    const PEDESTAL_TIP_HEIGHT = 1.0;
-    const outerCenterY = PEDESTAL_TIP_HEIGHT + CORNER_DROP + CUBE_SIZE / 2;
+    // Set outerCenterY so lower corners land at exactly PEDESTAL_TIP_HEIGHT above ground:
+    //   bottomY + CORNER_NET_LIFT = PEDESTAL_TIP_HEIGHT  →  bottomY = PEDESTAL_TIP_HEIGHT - CORNER_NET_LIFT
+    const PEDESTAL_TIP_HEIGHT = 11 / 12; // 11 inches
+    const outerCenterY = (PEDESTAL_TIP_HEIGHT - CORNER_NET_LIFT) + CUBE_SIZE / 2;
     const cubeCenter = new THREE.Vector3(0, outerCenterY, 0);
     buildCube(CUBE_SIZE, outerCenterY, outerDirGroups, cubeCenter);
 
@@ -243,33 +256,75 @@
     // --- Pedestals: tip at each rotated lower corner, base (5"x5") at ground (Y=0) ---
     {
       const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.3, roughness: 0.7 });
-      const baseRadius = (5 / 12) / Math.sqrt(2); // circumradius for a 5"x5" square
-      const half = CUBE_SIZE / 2;
-      const bottomY = outerCenterY - half;
-
-      function rotatedLowerCorner(corner, poleMid) {
-        const axis = new THREE.Vector3().subVectors(cubeCenter, poleMid).normalize();
-        const quat = new THREE.Quaternion().setFromAxisAngle(axis, POLE_TWIST_ANGLE);
-        return corner.clone().sub(poleMid).applyQuaternion(quat).add(poleMid);
-      }
-
-      // Each corner's "lower point" comes from the pole whose rotation drops that corner
-      const lowerCorners = [
-        rotatedLowerCorner(new THREE.Vector3(-half, bottomY, -half), new THREE.Vector3(0,     bottomY, -half)), // leftright [0→1]
-        rotatedLowerCorner(new THREE.Vector3( half, bottomY, -half), new THREE.Vector3( half, bottomY,  0   )), // frontback [1→2]
-        rotatedLowerCorner(new THREE.Vector3( half, bottomY,  half), new THREE.Vector3(0,     bottomY,  half)), // leftright [3→2]
-        rotatedLowerCorner(new THREE.Vector3(-half, bottomY,  half), new THREE.Vector3(-half, bottomY,  0   )), // frontback [0→3]
-      ];
-
-      for (const lc of lowerCorners) {
-        const h = lc.y; // pedestal height = tip Y (base sits at Y=0)
-        const geo = new THREE.CylinderGeometry(0, baseRadius, h, 4);
+      const baseRadius = (6 / 12) / Math.sqrt(2); // circumradius for a 6"x6" square
+      // Use the actual built endpoint positions (populated by buildCube above) so tips
+      // are guaranteed to align exactly with the pole endpoints.
+      // Indices 0, 3, 9, 10 are the lower endpoints of the 4 base horizontal poles.
+      for (const idx of [0, 3, 9, 10]) {
+        const tip = poleEndpoints[idx].position;
+        const geo = new THREE.CylinderGeometry(0, baseRadius, PEDESTAL_TIP_HEIGHT, 4);
         const mesh = new THREE.Mesh(geo, pedestalMat);
-        mesh.position.set(lc.x, h / 2, lc.z);
+        mesh.position.set(tip.x, PEDESTAL_TIP_HEIGHT / 2, tip.z);
         mesh.rotation.y = Math.PI / 4;
         scene.add(mesh);
       }
     }
+
+    // --- Pole endpoint index labels ---
+    function makeEndpointLabel(idx, position) {
+      const size = 128;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      ctx.beginPath();
+      ctx.arc(size/2, size/2, size/2 - 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${size * 0.45}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(idx), size/2, size/2);
+      const tex = new THREE.CanvasTexture(canvas);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+      sprite.position.copy(position);
+      sprite.scale.set(0.35, 0.35, 1);
+      scene.add(sprite);
+      return sprite;
+    }
+
+    const endpointLabels = poleEndpoints.map(ep => makeEndpointLabel(ep.index, ep.position));
+
+    // --- Neon green connector poles ---
+    {
+      const greenMat = new THREE.MeshBasicMaterial({ color: 0x00ff44 });
+      const greenRadius = 0.3125 / 12 / 2; // 5/16" diameter
+      const outerPairs = [[20,11],[11,3],[3,20],[22,2],[2,9],[9,22],[16,8],[8,0],[0,16],[18,1],[1,10],[10,18],[7,15],[15,21],[21,7],[13,6],[6,23],[23,13],[4,12],[12,17],[17,4],[14,5],[5,19],[19,14],[3,18],[9,20],[0,22],[10,16],[1,14],[11,7],[2,13],[8,4],[17,6],[12,19],[5,21],[15,23]];
+      const extraPairs = [[3,27],[20,44],[11,35],[9,33],[22,46],[2,26],[0,24],[16,40],[8,32],[10,34],[18,42],[1,25],[13,37],[23,47],[6,30],[7,31],[21,45],[15,39],[14,38],[19,43],[5,29],[17,41],[12,36],[4,28]];
+      const innerPairs = outerPairs.map(([i, j]) => [i + 24, j + 24]);
+      const pairs = [...outerPairs, ...innerPairs, ...extraPairs];
+      for (const [i, j] of pairs) {
+        const a = poleEndpoints[i].position;
+        const b = poleEndpoints[j].position;
+        const dir = new THREE.Vector3().subVectors(b, a);
+        const length = dir.length();
+        const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+        const geo = new THREE.CylinderGeometry(greenRadius, greenRadius, length, 16);
+        const mesh = new THREE.Mesh(geo, greenMat);
+        mesh.position.copy(mid);
+        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+        scene.add(mesh);
+      }
+    }
+
+    let labelsVisible = false;
+    endpointLabels.forEach(s => s.visible = false);
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'l' || e.key === 'L') {
+        labelsVisible = !labelsVisible;
+        endpointLabels.forEach(s => s.visible = labelsVisible);
+      }
+    });
 
     // --- Ground plane ---
     const groundGeometry = new THREE.PlaneGeometry(50, 50);
@@ -314,7 +369,7 @@
       return param.currentVal;
     }
 
-    const paramSpeed = createSmoothParam(13, 18, 2, 6);
+    const paramSpeed = createSmoothParam(13, 22, 2, 6);
     const paramTailLength = createSmoothParam(3, 10, 2, 7);
 
     // Build a set of all sphere indices that belong to any base direction, for quick lookup
@@ -432,9 +487,14 @@
       // Update overlay text
       const overlay = document.getElementById('overlay');
       const bar = w => '█'.repeat(Math.round(w * 10)).padEnd(10, '▁');
+      const cornerCord = poleEndpoints[0].position.distanceTo(poleEndpoints[8].position);
+      const edgeLength = poleEndpoints[8].position.distanceTo(poleEndpoints[4].position);
       overlay.innerHTML =
         `speed:  ${currentSpeed.toFixed(1).padStart(5)}  [${paramSpeed.min}–${paramSpeed.max}]<br>` +
         `tail:   ${currentTailLength.toFixed(1).padStart(5)}  [${paramTailLength.min}–${paramTailLength.max}]<br>` +
+        `[L] labels: ${labelsVisible ? 'on' : 'off'}<br>` +
+        `Corner Cord: ${(cornerCord * 12).toFixed(2)}"  (${cornerCord.toFixed(3)} ft)<br>` +
+        `Edge Length: ${(edgeLength * 12).toFixed(2)}"  (${edgeLength.toFixed(3)} ft)<br>` +
         `<br>outer:<br>` +
         groupDefs.map((def, i) =>
           `&nbsp;${def.name.padEnd(10)} ${bar(outerWeights[i])} ${(outerWeights[i] * 100).toFixed(0).padStart(3)}%`
