@@ -319,10 +319,16 @@
 
     let labelsVisible = false;
     endpointLabels.forEach(s => s.visible = false);
+
+    let windVisible = true;
     window.addEventListener('keydown', (e) => {
       if (e.key === 'l' || e.key === 'L') {
         labelsVisible = !labelsVisible;
         endpointLabels.forEach(s => s.visible = labelsVisible);
+      }
+      if (e.key === 'd' || e.key === 'D') {
+        windVisible = !windVisible;
+        windParticles.visible = windVisible;
       }
     });
 
@@ -333,6 +339,26 @@
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
+
+    // --- Blowing particles ---
+    const PARTICLE_COUNT = 4000;
+    const WIND_AREA = 25;  // half-extent of spawn box in X/Z
+    const WIND_HEIGHT = 12;
+    const windPositions  = new Float32Array(PARTICLE_COUNT * 3);
+    const windVelocities = new Float32Array(PARTICLE_COUNT * 3);
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      windPositions[i*3]   = (Math.random() - 0.5) * WIND_AREA * 2;
+      windPositions[i*3+1] = Math.random() * WIND_HEIGHT;
+      windPositions[i*3+2] = (Math.random() - 0.5) * WIND_AREA * 2;
+      windVelocities[i*3]   = 4.0 + Math.random() * 8.0;          // primary wind (X)
+      windVelocities[i*3+1] = (Math.random() - 0.5) * 0.3;        // slight vertical drift
+      windVelocities[i*3+2] = (Math.random() - 0.5) * 0.8;        // slight lateral drift
+    }
+    const windGeo = new THREE.BufferGeometry();
+    windGeo.setAttribute('position', new THREE.BufferAttribute(windPositions, 3));
+    const windMat = new THREE.PointsMaterial({ color: 0xddccaa, size: 0.04, transparent: true, opacity: 0.5, sizeAttenuation: true });
+    const windParticles = new THREE.Points(windGeo, windMat);
+    scene.add(windParticles);
 
     // --- Animation ---
     const color = new THREE.Color();
@@ -371,6 +397,7 @@
 
     const paramSpeed = createSmoothParam(13, 22, 2, 6);
     const paramTailLength = createSmoothParam(3, 10, 2, 7);
+    const paramWindDensity = createSmoothParam(0.05, 1.0, 3, 10);
 
     // Build a set of all sphere indices that belong to any base direction, for quick lookup
     const baseDirs = ['vertical', 'leftright', 'frontback'];
@@ -493,6 +520,7 @@
         `speed:  ${currentSpeed.toFixed(1).padStart(5)}  [${paramSpeed.min}–${paramSpeed.max}]<br>` +
         `tail:   ${currentTailLength.toFixed(1).padStart(5)}  [${paramTailLength.min}–${paramTailLength.max}]<br>` +
         `[L] labels: ${labelsVisible ? 'on' : 'off'}<br>` +
+        `[D] dust:   ${windVisible ? 'on' : 'off'}<br>` +
         `Corner Cord: ${(cornerCord * 12).toFixed(2)}"  (${cornerCord.toFixed(3)} ft)<br>` +
         `Edge Length: ${(edgeLength * 12).toFixed(2)}"  (${edgeLength.toFixed(3)} ft)<br>` +
         `<br>outer:<br>` +
@@ -503,6 +531,22 @@
         groupDefs.map((def, i) =>
           `&nbsp;${def.name.padEnd(10)} ${bar(innerWeights[i])} ${(innerWeights[i] * 100).toFixed(0).padStart(3)}%`
         ).join('<br>');
+
+      // Animate blowing particles
+      windGeo.setDrawRange(0, Math.floor(updateSmoothParam(paramWindDensity, t) * PARTICLE_COUNT));
+      const wpos = windGeo.attributes.position.array;
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        wpos[i*3]   += windVelocities[i*3]   * dt;
+        wpos[i*3+1] += windVelocities[i*3+1] * dt;
+        wpos[i*3+2] += windVelocities[i*3+2] * dt;
+        if (wpos[i*3] >  WIND_AREA) wpos[i*3] -= WIND_AREA * 2;
+        if (wpos[i*3] < -WIND_AREA) wpos[i*3] += WIND_AREA * 2;
+        if (wpos[i*3+1] < 0)           wpos[i*3+1] = WIND_HEIGHT;
+        if (wpos[i*3+1] > WIND_HEIGHT)  wpos[i*3+1] = 0;
+        if (wpos[i*3+2] >  WIND_AREA) wpos[i*3+2] -= WIND_AREA * 2;
+        if (wpos[i*3+2] < -WIND_AREA) wpos[i*3+2] += WIND_AREA * 2;
+      }
+      windGeo.attributes.position.needsUpdate = true;
 
       controls.update();
       renderer.render(scene, camera);
