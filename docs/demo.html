@@ -138,12 +138,6 @@
         const sphere = new THREE.Mesh(sphereGeometry, material);
         const t = i / (LIGHTS_PER_EDGE - 1);
         sphere.position.lerpVectors(a, b, t);
-        const outward = new THREE.Vector3().copy(sphere.position);
-        outward.y = 0;
-        if (outward.length() > 0) {
-          outward.normalize().multiplyScalar(POLE_RADIUS + LIGHT_RADIUS + 0.005);
-          sphere.position.add(outward);
-        }
         scene.add(sphere);
         lightSpheres.push(sphere);
         poleIndices.push(lightSpheres.length - 1);
