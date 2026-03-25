@@ -46,7 +46,7 @@
     new THREE.TextureLoader().load('Playa_Sunrise_8k.jpg', (tex) => {
       tex.mapping = THREE.EquirectangularReflectionMapping;
       scene.background = tex;
-      scene.backgroundIntensity = 0.08;
+      scene.backgroundIntensity = 0.05;
     });
 
     // Ground texture is applied after ground mesh is created (see below)
@@ -92,6 +92,10 @@
       if (e.key === 'b' || e.key === 'B') {
         bloomPass.enabled = !bloomPass.enabled;
       }
+      if (e.key === 'n' || e.key === 'N') {
+        lightLevelIndex = (lightLevelIndex + 1) % lightLevels.length;
+        applyLightLevel(lightLevelIndex);
+      }
     });
 
     // --- Resize handler ---
@@ -103,10 +107,25 @@
     });
 
     // --- Scene lighting ---
-    scene.add(new THREE.AmbientLight(0x404040, 1));
+    //scene.add(new THREE.AmbientLight(0x404040, 0.01));
     const dirLight = new THREE.DirectionalLight(0xffffff, .08);
     dirLight.position.set(5, 10, 5);
     scene.add(dirLight);
+
+    // --- Light level presets: [dirLight intensity, backgroundIntensity, label] ---
+    const lightLevels = [
+      { dir: 0.11,  bg: 0.06,  label: 'dawn'   },
+      { dir: 0.02, bg: 0.01, label: 'night' },
+      { dir: 0.34, bg: 0.2, label: 'day' },
+    ];
+
+    let lightLevelIndex = 0;
+    function applyLightLevel(idx) {
+      const lvl = lightLevels[idx];
+      dirLight.intensity = lvl.dir;
+      scene.backgroundIntensity = lvl.bg;
+    }
+    applyLightLevel(0);
 
     // --- Shared geometry and materials ---
     const poleMaterial = new THREE.MeshStandardMaterial({
@@ -342,7 +361,7 @@
 
     let windVisible = false;
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'l' || e.key === 'L') {
+      if (e.key === 'p' || e.key === 'P') {
         labelsVisible = !labelsVisible;
         endpointLabels.forEach(s => s.visible = labelsVisible);
       }
@@ -549,8 +568,9 @@
         `tail:   ${currentTailLength.toFixed(1).padStart(5)}  [${paramTailLength.min}–${paramTailLength.max}]<br>` +
         `[O] orbit:  ${autoOrbit ? 'auto' : 'manual'}<br>` +
         `[B] bloom:  ${bloomPass.enabled ? 'on' : 'off'}<br>` +
-        `[L] labels: ${labelsVisible ? 'on' : 'off'}<br>` +
-        `[D] dust:   ${windVisible ? 'on' : 'off'}`;
+        `[P] labels: ${labelsVisible ? 'on' : 'off'}<br>` +
+        `[D] dust:   ${windVisible ? 'on' : 'off'}<br>` +
+        `[N] light:  ${lightLevels[lightLevelIndex].label}`;
 
       // Animate blowing particles
       windGeo.setDrawRange(0, Math.floor(updateSmoothParam(paramWindDensity, t) * PARTICLE_COUNT));
