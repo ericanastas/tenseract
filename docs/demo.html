@@ -32,7 +32,7 @@
     const CUBE_SIZE = 5;
     const POLE_RADIUS = 0.5 / 12 / 2; // 0.5 inch diameter → radius in feet
     const LIGHTS_PER_EDGE = 45;
-    const LIGHT_RADIUS = 0.04; // ~1 inch diameter sphere
+    const LIGHT_RADIUS = 0.05; // ~1 inch diameter sphere
     const POLE_TWIST_ANGLE = 25 * Math.PI / 180;
     const POLE_INWARD_FACTOR = 0.31; // 0 = no movement, 1 = fully at center
 
@@ -141,7 +141,7 @@
       const poleIndices = [];
 
       for (let i = 0; i < LIGHTS_PER_EDGE; i++) {
-        const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false });
         const sphere = new THREE.Mesh(sphereGeometry, material);
         const t = i / (LIGHTS_PER_EDGE - 1);
         sphere.position.lerpVectors(a, b, t);
@@ -320,7 +320,8 @@
     let labelsVisible = false;
     endpointLabels.forEach(s => s.visible = false);
 
-    let windVisible = true;
+    let windVisible = false;
+    windParticles.visible = false;
     window.addEventListener('keydown', (e) => {
       if (e.key === 'l' || e.key === 'L') {
         labelsVisible = !labelsVisible;
@@ -464,7 +465,7 @@
       const tempColor = new THREE.Color();
       for (let i = 0; i < lightSpheres.length; i++) {
         const info = allGroupSpheres.get(i);
-        if (!info) { lightSpheres[i].material.color.copy(darkColor); continue; }
+        if (!info) { lightSpheres[i].material.opacity = 0; continue; }
 
         const isInner = info.cubeSet === 'inner';
         let lr = 0, lg = 0, lb = 0;
@@ -481,6 +482,8 @@
           lr += tempColor.r; lg += tempColor.g; lb += tempColor.b;
         }
 
+        const lum = lr * 0.299 + lg * 0.587 + lb * 0.114;
+        lightSpheres[i].material.opacity = lum < 0.005 ? 0 : Math.min(lum * 4, 1);
         lightSpheres[i].material.color.setRGB(
           Math.min(lr, 1), Math.min(lg, 1), Math.min(lb, 1)
         );
