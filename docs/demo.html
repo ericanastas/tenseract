@@ -107,7 +107,8 @@
 
     // --- Controls ---
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, CUBE_SIZE / 2, 0);
+    controls.target.set(0, 0, 0); // updated below once outerCenterY is known
+    controls.enablePan = false;
     controls.autoRotate = true;
     controls.autoRotateSpeed = -2;
     controls.update();
@@ -341,6 +342,7 @@
     //   bottomY + CORNER_NET_LIFT = PEDESTAL_TIP_HEIGHT  →  bottomY = PEDESTAL_TIP_HEIGHT - CORNER_NET_LIFT
     const PEDESTAL_TIP_HEIGHT = 11 / 12; // 11 inches
     const outerCenterY = (PEDESTAL_TIP_HEIGHT - CORNER_NET_LIFT) + CUBE_SIZE / 2;
+    controls.target.set(0, outerCenterY, 0);
     const cubeCenter = new THREE.Vector3(0, outerCenterY, 0);
     buildCube(CUBE_SIZE, outerCenterY, outerDirGroups, cubeCenter, OUTER_LIGHTS_PER_EDGE);
 
