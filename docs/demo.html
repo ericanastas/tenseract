@@ -13,9 +13,12 @@
       text-shadow: 0 0 4px #000;
     }
     #controls {
-      position: fixed; bottom: 16px; left: 50%;
-      transform: translateX(-50%);
+      position: fixed; 
+      bottom: 16px; 
       display: flex; gap: 8px;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
     }
     #controls button {
       background: rgba(0,0,0,0.6);
@@ -26,6 +29,8 @@
       font: 13px monospace;
       cursor: pointer;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
+      width: 150px;
+      height: 60px;
     }
     #controls button:hover {
       background: rgba(255,255,255,0.1);
