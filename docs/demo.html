@@ -455,7 +455,7 @@
     });
 
     // --- Ground plane ---
-    const groundGeometry = new THREE.PlaneGeometry(50, 50);
+    const groundGeometry = new THREE.PlaneGeometry(75, 75);
     const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
     const ground = new THREE.Mesh(groundGeometry, groundMaterial);
     ground.rotation.x = -Math.PI / 2;
@@ -463,7 +463,7 @@
     scene.add(ground);
     new THREE.TextureLoader().load('GroundTexture.jpg', (tex) => {
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(8, 8);
+      tex.repeat.set(12, 12);
       ground.material.map = tex;
       ground.material.color.set(0xffffff);
       ground.material.needsUpdate = true;
