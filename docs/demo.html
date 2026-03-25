@@ -33,6 +33,7 @@
     const POLE_RADIUS = 0.5 / 12 / 2; // 0.5 inch diameter → radius in feet
     const LIGHTS_PER_EDGE = 45;
     const LIGHT_RADIUS = 0.04; // ~1 inch diameter sphere
+    const POLE_TWIST_ANGLE = 25 * Math.PI / 180;
 
     // --- Scene ---
     const scene = new THREE.Scene();
@@ -105,8 +106,15 @@
     const innerDirGroups = makeDirGroups();
 
     // --- Function to build a single edge (pole + lights) and tag its direction ---
-    function buildEdge(a, b, direction, groups) {
+    function buildEdge(a, b, direction, groups, cubeCenter) {
+      // Rotate endpoints 10° about the axis from the pole midpoint toward the cube center
       const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+      if (cubeCenter) {
+        const rotAxis = new THREE.Vector3().subVectors(cubeCenter, mid).normalize();
+        const rotQuat = new THREE.Quaternion().setFromAxisAngle(rotAxis, POLE_TWIST_ANGLE);
+        a = a.clone().sub(mid).applyQuaternion(rotQuat).add(mid);
+        b = b.clone().sub(mid).applyQuaternion(rotQuat).add(mid);
+      }
       const dir = new THREE.Vector3().subVectors(b, a);
       const length = dir.length();
 
@@ -152,7 +160,7 @@
     }
 
     // --- Function to build a cube frame with lights ---
-    function buildCube(size, centerY, groups) {
+    function buildCube(size, centerY, groups, cubeCenter) {
       const half = size / 2;
       const bottomY = centerY - size / 2;
       const topY = centerY + size / 2;
@@ -178,7 +186,7 @@
       ];
 
       for (const [[ai, bi], direction] of edgesWithDir) {
-        buildEdge(corners[ai], corners[bi], direction, groups);
+        buildEdge(corners[ai], corners[bi], direction, groups, cubeCenter);
       }
     }
 
@@ -199,19 +207,26 @@
       ];
     }
 
-    // --- Build outer cube (5', base at 1') ---
-    const outerCenterY = 1 + CUBE_SIZE / 2;
-    buildCube(CUBE_SIZE, outerCenterY, outerDirGroups);
+    // Pre-compute how far below bottomY the lower corners drop due to pole rotation.
+    // The drop amount is translation-invariant so we compute it with bottomY=0 as reference.
+    const _h = CUBE_SIZE / 2;
+    const _refMid    = new THREE.Vector3(0,  0,  -_h);
+    const _refCenter = new THREE.Vector3(0, _h,   0);
+    const _refCorner = new THREE.Vector3(-_h, 0, -_h);
+    const _refAxis   = new THREE.Vector3().subVectors(_refCenter, _refMid).normalize();
+    const _refQuat   = new THREE.Quaternion().setFromAxisAngle(_refAxis, POLE_TWIST_ANGLE);
+    const _refRotated = _refCorner.clone().sub(_refMid).applyQuaternion(_refQuat).add(_refMid);
+    const CORNER_DROP = -_refRotated.y; // how far below bottomY the lower point falls
+
+    // Set outerCenterY so the rotated lower corners land at exactly 1 foot above ground
+    const PEDESTAL_TIP_HEIGHT = 1.0;
+    const outerCenterY = PEDESTAL_TIP_HEIGHT + CORNER_DROP + CUBE_SIZE / 2;
+    const cubeCenter = new THREE.Vector3(0, outerCenterY, 0);
+    buildCube(CUBE_SIZE, outerCenterY, outerDirGroups, cubeCenter);
 
     // --- Build inner cube (2.5', centered in outer cube) ---
-    buildCube(CUBE_SIZE / 2, outerCenterY, innerDirGroups);
+    buildCube(CUBE_SIZE / 2, outerCenterY, innerDirGroups, cubeCenter);
 
-    // --- Connect matching corners of outer and inner cubes ---
-    const outerCorners = getCubeCorners(CUBE_SIZE, outerCenterY);
-    const innerCorners = getCubeCorners(CUBE_SIZE / 2, outerCenterY);
-    for (let i = 0; i < 8; i++) {
-      buildEdge(outerCorners[i], innerCorners[i], 'diagonal', outerDirGroups);
-    }
 
     // Direction group cycle order — each pair shares the same edges, reversed flag flips particle direction
     const groupDefs = [
@@ -225,16 +240,32 @@
     const groupNames = groupDefs.map(g => g.name);
     const SWITCH_INTERVAL = 3; // seconds per direction
 
-    // --- Pedestals (pyramid, 5"x5" base at ground, tip at outer cube bottom corners) ---
+    // --- Pedestals: tip at each rotated lower corner, base (5"x5") at ground (Y=0) ---
     {
       const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.3, roughness: 0.7 });
       const baseRadius = (5 / 12) / Math.sqrt(2); // circumradius for a 5"x5" square
-      const pedestalHeight = 1; // outer cube bottom is at Y=1
-      const pedestalGeo = new THREE.CylinderGeometry(0, baseRadius, pedestalHeight, 4);
       const half = CUBE_SIZE / 2;
-      for (const [x, z] of [[-half, -half], [half, -half], [half, half], [-half, half]]) {
-        const mesh = new THREE.Mesh(pedestalGeo, pedestalMat);
-        mesh.position.set(x, pedestalHeight / 2, z);
+      const bottomY = outerCenterY - half;
+
+      function rotatedLowerCorner(corner, poleMid) {
+        const axis = new THREE.Vector3().subVectors(cubeCenter, poleMid).normalize();
+        const quat = new THREE.Quaternion().setFromAxisAngle(axis, POLE_TWIST_ANGLE);
+        return corner.clone().sub(poleMid).applyQuaternion(quat).add(poleMid);
+      }
+
+      // Each corner's "lower point" comes from the pole whose rotation drops that corner
+      const lowerCorners = [
+        rotatedLowerCorner(new THREE.Vector3(-half, bottomY, -half), new THREE.Vector3(0,     bottomY, -half)), // leftright [0→1]
+        rotatedLowerCorner(new THREE.Vector3( half, bottomY, -half), new THREE.Vector3( half, bottomY,  0   )), // frontback [1→2]
+        rotatedLowerCorner(new THREE.Vector3( half, bottomY,  half), new THREE.Vector3(0,     bottomY,  half)), // leftright [3→2]
+        rotatedLowerCorner(new THREE.Vector3(-half, bottomY,  half), new THREE.Vector3(-half, bottomY,  0   )), // frontback [0→3]
+      ];
+
+      for (const lc of lowerCorners) {
+        const h = lc.y; // pedestal height = tip Y (base sits at Y=0)
+        const geo = new THREE.CylinderGeometry(0, baseRadius, h, 4);
+        const mesh = new THREE.Mesh(geo, pedestalMat);
+        mesh.position.set(lc.x, h / 2, lc.z);
         mesh.rotation.y = Math.PI / 4;
         scene.add(mesh);
       }
