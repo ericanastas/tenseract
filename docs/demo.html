@@ -46,14 +46,7 @@
       scene.backgroundIntensity = 0.08;
     });
 
-    // --- Ground texture ---
-    new THREE.TextureLoader().load('GroundTexture.jpg', (tex) => {
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(8, 8);
-      ground.material.map = tex;
-      ground.material.color.set(0xffffff);
-      ground.material.needsUpdate = true;
-    });
+    // Ground texture is applied after ground mesh is created (see below)
 
     // --- Camera ---
     const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -321,7 +314,6 @@
     endpointLabels.forEach(s => s.visible = false);
 
     let windVisible = false;
-    windParticles.visible = false;
     window.addEventListener('keydown', (e) => {
       if (e.key === 'l' || e.key === 'L') {
         labelsVisible = !labelsVisible;
@@ -340,6 +332,13 @@
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
+    new THREE.TextureLoader().load('GroundTexture.jpg', (tex) => {
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(8, 8);
+      ground.material.map = tex;
+      ground.material.color.set(0xffffff);
+      ground.material.needsUpdate = true;
+    });
 
     // --- Blowing particles ---
     const PARTICLE_COUNT = 4000;
@@ -359,6 +358,7 @@
     windGeo.setAttribute('position', new THREE.BufferAttribute(windPositions, 3));
     const windMat = new THREE.PointsMaterial({ color: 0xddccaa, size: 0.04, transparent: true, opacity: 0.5, sizeAttenuation: true });
     const windParticles = new THREE.Points(windGeo, windMat);
+    windParticles.visible = false;
     scene.add(windParticles);
 
     // --- Animation ---
