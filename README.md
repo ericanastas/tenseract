@@ -1,6 +1,6 @@
 # [Tenseract](http://tenseract.art)
 
-A Burningman 2025 Installation
+A Burningman 2024/2026 Installation
 
 `tensegrity + tesseract = tenseract`
 
